@@ -45,7 +45,9 @@ export async function handleAddCafe(ctx: AppContext) {
     }
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     cafeData.avatar = photo.file_id;
-    await ctx.reply("Введите адрес кафе (можно несколько через запятую):");
+    await ctx.reply(
+      "Введите адрес кафе (можно несколько через точку с запятой и в формате - ул. Дахадаева, 100А):"
+    );
     return;
   }
 
