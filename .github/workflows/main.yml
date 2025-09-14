@@ -60,5 +60,5 @@ jobs:
             docker rmi ${{ secrets.DOCKER_HUB_USERNAME }}/kartateka-bot:latest || true
 
             # Запускаем новые контейнеры
-            cd kartateka_bot
+            cd kartateka-bot
             docker compose up -d
