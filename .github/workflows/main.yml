@@ -1,0 +1,64 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master # Запускать pipeline при пуше в ветку main
+  # pull_request:
+  #   branches:
+  #     - master # Запускать pipeline при пул-реквесте в ветку main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Шаг 1: Проверка кода
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Шаг 2: Настройка Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Шаг 3: Логин в Docker Hub (если нужно деплоить образы)
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # Шаг 4: Сборка и тегирование образа бэкенда
+      - name: Build and tag Docker image
+        run: |
+          # Очищаем старые образы
+          docker system prune -f
+          # Собираем образ бэкенда
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/kartateka-bot:latest .
+
+      # Шаг 5: Пуш образов в Docker Hub (опционально)
+      - name: Push Docker images
+        run: |
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/kartateka-bot:latest
+
+      # Шаг 6: Деплой (пример для сервера через SSH)
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          script: |
+            # Останавливаем и удаляем старые контейнеры
+            if docker ps -a --format '{{.Names}}' | grep -q 'kartateka_bot'; then
+              docker stop kartateka_bot
+              docker rm -f kartateka_bot
+            fi
+
+            # Удаляем старые образы
+            docker rmi ${{ secrets.DOCKER_HUB_USERNAME }}/kartateka-bot:latest || true
+
+            # Запускаем новые контейнеры
+            cd kartateka_bot
+            docker compose up -d
