@@ -197,7 +197,7 @@ router.post("/:id/review", async (req, res, next) => {
 
   {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const reviews = await reviewRepo.find({
+    const review = await reviewRepo.findOne({
       where: {
         user: { tgId: req["user"]["id"] },
         createdAt: Between(twentyFourHoursAgo, new Date()),
@@ -207,14 +207,17 @@ router.post("/:id/review", async (req, res, next) => {
       },
     });
 
-    if (reviews.length > 0) {
+    if (review) {
       res.status(403).end();
       return;
     }
   }
 
   if (
-    (await reviewRepo.findBy({ user: { tgId: req["user"]["id"] } })).length > 0
+    await reviewRepo.findOneBy({
+      user: { tgId: req["user"]["id"] },
+      cafe: { id: +id },
+    })
   ) {
     res.status(403).end();
     return;
