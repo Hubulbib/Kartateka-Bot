@@ -18,7 +18,7 @@ export const setupBot = async (bot: Bot<AppContext>) => {
   // Инициализация сервисов
 
   // Настройка меню
-  await setupMenu(bot);
+  // await setupMenu(bot);
 
   // Приветственное сообщение
   bot.command("start", async (ctx) => {
