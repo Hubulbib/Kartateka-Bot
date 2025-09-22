@@ -196,7 +196,7 @@ router.post("/:id/review", async (req, res, next) => {
   }
 
   {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const review = await reviewRepo.findOne({
       where: {
         user: { tgId: req["user"]["id"] },
