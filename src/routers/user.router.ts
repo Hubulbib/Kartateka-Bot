@@ -2,6 +2,7 @@ import { Router } from "express";
 import { AppDataSource } from "../services/database";
 import { User } from "../entities/user";
 import { Criteria } from "../entities/types/criteria";
+import { Review } from "../entities/review";
 
 const router = Router();
 
@@ -39,6 +40,17 @@ router.patch("/criteria", async (req, res) => {
   });
 
   res.json({ data: user });
+});
+
+router.get("/reviews", async (req, res) => {
+  const reviewRepo = AppDataSource.getRepository(Review);
+  const userReviews = await reviewRepo.find({
+    where: { user: { tgId: req["user"]["id"] } },
+    order: { createdAt: "DESC" },
+    relations: ["cafe"],
+  });
+
+  res.json({ data: userReviews });
 });
 
 export const userRouter = router;
