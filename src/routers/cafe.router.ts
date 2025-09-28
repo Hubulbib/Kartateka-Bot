@@ -53,24 +53,44 @@ router.get("/rating/personal", async (req, res, next) => {
 
   if (!user) {
     res.status(404).end();
+    return;
   }
 
   const cafeList = await cafeRepo.find({
     relations: { reviews: true },
-    where: { reviews: { user: { id: user.id } }, city: { name: city } },
+    where: { city: { name: city } },
   });
 
   for (const cafe of cafeList) {
-    const aroma = cafe.reviews[0].criteria.aroma,
-      taste = cafe.reviews[0].criteria.taste,
-      atmosphere = cafe.reviews[0].criteria.atmosphere,
-      speed = cafe.reviews[0].criteria.speed;
+    if (cafe.reviews.length === 0) {
+      cafe["score"] = 0;
+      continue;
+    }
+
+    const reviewCount = cafe.reviews.length;
+
+    let aroma = 0;
+    let taste = 0;
+    let atmosphere = 0;
+    let speed = 0;
+
+    for (const review of cafe.reviews) {
+      aroma += review.criteria.aroma;
+      taste += review.criteria.taste;
+      atmosphere += review.criteria.atmosphere;
+      speed += review.criteria.speed;
+    }
+
+    const avgAroma = aroma / reviewCount;
+    const avgTaste = taste / reviewCount;
+    const avgAtmosphere = atmosphere / reviewCount;
+    const avgSpeed = speed / reviewCount;
 
     const score =
-      (user.criteria.aroma * aroma +
-        user.criteria.atmosphere * atmosphere +
-        user.criteria.speed * speed +
-        user.criteria.taste * taste) /
+      (user.criteria.aroma * avgAroma +
+        user.criteria.atmosphere * avgAtmosphere +
+        user.criteria.speed * avgSpeed +
+        user.criteria.taste * avgTaste) /
       (user.criteria.aroma +
         user.criteria.atmosphere +
         user.criteria.speed +
@@ -166,6 +186,10 @@ router.get("/:id", async (req, res, next) => {
   atmosphere /= cafe.reviews.length || 1;
   speed /= cafe.reviews.length || 1;
   cafe["score"] = (aroma + taste + atmosphere + speed) / 4;
+
+  cafe.reviews.sort((a, b) =>
+    new Date(a.createdAt) < new Date(b.createdAt) ? 1 : -1
+  );
 
   res.json({
     data: { ...cafe, avatar: await ImageService.getImage(cafe.avatar) },
