@@ -3,6 +3,7 @@ import { AppDataSource } from "../services/database";
 import { User } from "../entities/user";
 import { Criteria } from "../entities/types/criteria";
 import { Review } from "../entities/review";
+import { ImageService } from "../services/image";
 
 const router = Router();
 
@@ -49,6 +50,12 @@ router.get("/reviews", async (req, res) => {
     order: { createdAt: "DESC" },
     relations: ["cafe"],
   });
+
+  for (const review of userReviews) {
+    if (review.cafe) {
+      review.cafe.avatar = await ImageService.getImage(review.cafe.avatar);
+    }
+  }
 
   res.json({ data: userReviews });
 });
