@@ -1,7 +1,6 @@
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { AdminAction, AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { City } from "../../../entities/city";
+import { prismaClient } from "../../../db";
 import { isAdmin } from "../../bot";
 
 export const setupCityAdmin = (bot: Bot<AppContext>) => {
@@ -29,9 +28,9 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
   bot.hears("📝 Редактировать город", async (ctx) => {
     if (!isAdmin(ctx)) return;
 
-    const cityRepo = AppDataSource.getRepository(City);
-    const cities = await cityRepo.find({
-      relations: { cafe: true, users: true },
+    const cityRepo = prismaClient.city;
+    const cities = await cityRepo.findMany({
+      include: { cafe: true, user: true },
     });
 
     const message = "🏙 Список городов:\n\n";
@@ -48,7 +47,7 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
           .text("✏️ Редактировать", `edit_city_${city.id}`)
           .text("🗑 Удалить", `delete_city_${city.id}`);
 
-        const message = `${city.name} (кафе: ${city.cafe.length}, пользователей: ${city.users.length})\n`;
+        const message = `${city.name} (кафе: ${city.cafe.length}, пользователей: ${city.user.length})\n`;
 
         await ctx.reply(message, {
           reply_markup: keyboard,
@@ -63,8 +62,8 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
     await ctx.answerCallbackQuery();
 
     const cityId = parseInt(ctx.match[1]);
-    const cityRepo = AppDataSource.getRepository(City);
-    const city = await cityRepo.findOneBy({ id: cityId });
+    const cityRepo = prismaClient.city;
+    const city = await cityRepo.findFirst({ where: { id: cityId } });
 
     if (city) {
       ctx.session.adminAction = "edit_city";
@@ -82,19 +81,19 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
     await ctx.answerCallbackQuery();
 
     const cityId = parseInt(ctx.match[1]);
-    const cityRepo = AppDataSource.getRepository(City);
-    const city = await cityRepo.findOne({
+    const cityRepo = prismaClient.city;
+    const city = await cityRepo.findFirst({
       where: { id: cityId },
-      relations: { cafe: true, users: true },
+      include: { cafe: true, user: true },
     });
 
     if (city) {
-      if (city.cafe.length > 0 || city.users.length > 0) {
+      if (city.cafe.length > 0 || city.user.length > 0) {
         await ctx.editMessageText(
           `❌ Невозможно удалить город "${city.name}"\n` +
             `Связанные данные:\n` +
             `- Кафе: ${city.cafe.length}\n` +
-            `- Пользователи: ${city.users.length}`,
+            `- Пользователи: ${city.user.length}`,
           {
             reply_markup: new InlineKeyboard().text("🔙 Назад", "admin_cities"),
           }
@@ -102,7 +101,7 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
         return;
       }
 
-      await cityRepo.delete(cityId);
+      await cityRepo.delete({ where: { id: cityId } });
       await ctx.reply(`✅ Город "${city.name}" успешно удален`);
     }
   });

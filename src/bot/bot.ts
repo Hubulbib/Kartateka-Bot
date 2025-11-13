@@ -1,9 +1,7 @@
 import { Bot } from "grammy";
 import { AppContext } from "../interfaces";
 import { getMainMenu, setupMenu } from "./commands/menu";
-import { AppDataSource } from "../services/database";
-import { User } from "../entities/user";
-//import { adminEventsInit } from "./events/admin";
+import { prismaClient } from "../db";
 import { CONSTANTS } from "../const";
 import { setupAdminCommands } from "./commands/admin";
 import { adminEventsInit } from "./events/admin";
@@ -24,15 +22,15 @@ export const setupBot = async (bot: Bot<AppContext>) => {
   bot.command("start", async (ctx) => {
     const isAdmin = ctx.from && ADMIN_IDS.includes(ctx.from.id);
 
-    const userRepo = AppDataSource.getRepository(User);
+    const userRepo = prismaClient.user;
 
-    let user = await userRepo.findOne({ where: { tgId: ctx.from.id } });
+    let user = await userRepo.findUnique({ where: { tgId: ctx.from.id } });
     if (!user) {
-      user = userRepo.create({
-        tgId: ctx.from.id,
-        criteria: { aroma: 1.0, atmosphere: 1.3, speed: 1.5, taste: 1.7 },
+      user = await userRepo.create({
+        data: {
+          tgId: ctx.from.id,
+        },
       });
-      await userRepo.save(user);
     }
 
     await ctx.reply(CONSTANTS.HELLO_TEXT, {

@@ -1,10 +1,8 @@
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { type AdminAction, AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { Cafe } from "../../../entities/cafe";
-import { isAdmin } from "../../bot";
-import { City } from "../../../entities/city";
+import { prismaClient } from "../../../db";
 import { handleAddCafe } from "../../handlers/admin/admin-cafe";
+import { isAdmin } from "../../bot";
 
 export const setupCafeAdmin = (bot: Bot<AppContext>) => {
   // Главное меню управления кафе
@@ -38,10 +36,10 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
   bot.hears("📝 Редактировать кафе", async (ctx) => {
     if (!isAdmin(ctx)) return;
 
-    const cafeRepo = AppDataSource.getRepository(Cafe);
-    const cafes = await cafeRepo.find({
-      relations: ["city", "owner"],
-      order: { name: "ASC" },
+    const cafeRepo = prismaClient.cafe;
+    const cafes = await cafeRepo.findMany({
+      include: { city: true, user: true },
+      orderBy: { name: "asc" },
     });
 
     if (cafes.length === 0) {
@@ -77,21 +75,21 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
     const cafeData = ctx.session.cafeData;
 
     if (cafeData) {
-      const cafeRepo = AppDataSource.getRepository(Cafe);
-      const cityRepo = AppDataSource.getRepository(City);
-      const city = await cityRepo.findOneBy({ id: cityId });
+      const cafeRepo = prismaClient.cafe;
+      const cityRepo = prismaClient.city;
+      const city = await cityRepo.findFirst({ where: { id: cityId } });
 
       if (city) {
-        const cafe = cafeRepo.create({
-          name: cafeData.name,
-          description: cafeData.description,
-          address: cafeData.address,
-          avatar: cafeData.avatar,
-          owner: cafeData.owner,
-          city: city,
+        const cafe = await cafeRepo.create({
+          data: {
+            name: cafeData.name,
+            description: cafeData.description,
+            address: cafeData.address,
+            avatar: cafeData.avatar,
+            user: { connect: { id: cafeData.ownerId } },
+            city: { connect: { id: city.id } },
+          },
         });
-
-        await cafeRepo.save(cafe);
 
         // Очищаем данные сессии
         ctx.session.adminAction = undefined;
@@ -113,10 +111,10 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
     await ctx.answerCallbackQuery();
 
     const cafeId = parseInt(ctx.match[1]);
-    const cafeRepo = AppDataSource.getRepository(Cafe);
-    const cafe = await cafeRepo.findOne({
+    const cafeRepo = prismaClient.cafe;
+    const cafe = await cafeRepo.findFirst({
       where: { id: cafeId },
-      relations: ["city", "owner"],
+      include: { city: true, user: true },
     });
 
     if (cafe) {
@@ -140,9 +138,7 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
           `Адрес: ${cafe.address?.join(", ") || "Не указан"}\n` +
           `Город: ${cafe.city?.name || "Не выбран"}\n` +
           `Владелец: ${
-            cafe.owner
-              ? `ID:${cafe.owner.id} TG:${cafe.owner.tgId}`
-              : "Не указан"
+            cafe.user ? `ID:${cafe.user.id} TG:${cafe.user.tgId}` : "Не указан"
           }\n\n` +
           `Выберите, что хотите изменить:`,
         { reply_markup: keyboard }
@@ -177,8 +173,8 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
         );
         break;
       case "city":
-        const cityRepo = AppDataSource.getRepository(City);
-        const cities = await cityRepo.find();
+        const cityRepo = prismaClient.city;
+        const cities = await cityRepo.findMany();
         const keyboard = new InlineKeyboard();
 
         cities.forEach((city) => {
@@ -205,14 +201,16 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
     const cafeData = ctx.session.cafeData;
 
     if (cafeId && cityId) {
-      const cafeRepo = AppDataSource.getRepository(Cafe);
-      const cityRepo = AppDataSource.getRepository(City);
-      const cafe = await cafeRepo.findOneBy({ id: cafeId });
-      const city = await cityRepo.findOneBy({ id: cityId });
+      const cafeRepo = prismaClient.cafe;
+      const cityRepo = prismaClient.city;
+      const cafe = await cafeRepo.findFirst({ where: { id: cafeId } });
+      const city = await cityRepo.findFirst({ where: { id: cityId } });
 
       if (city) {
-        cafe.city = city;
-        await cafeRepo.save(cafe);
+        await cafeRepo.update({
+          where: { id: cafe.id },
+          data: { city: { connect: { id: city.id } } },
+        });
 
         // Очищаем данные сессии
         ctx.session.adminAction = undefined;
@@ -233,8 +231,8 @@ export const setupCafeAdmin = (bot: Bot<AppContext>) => {
     await ctx.answerCallbackQuery();
     const cafeId = Number(ctx.match[1]);
 
-    const cafeRepo = AppDataSource.getRepository(Cafe);
-    await cafeRepo.delete({ id: cafeId });
+    const cafeRepo = prismaClient.cafe;
+    await cafeRepo.delete({ where: { id: cafeId } });
 
     await ctx.editMessageText("✅ Кафе удалено");
   });

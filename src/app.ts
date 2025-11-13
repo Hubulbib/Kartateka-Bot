@@ -1,7 +1,6 @@
 import "dotenv/config";
 import "reflect-metadata";
 import { Bot, session, webhookCallback } from "grammy";
-import { DatabaseService } from "./services/database";
 import { setupBot } from "./bot/bot";
 import { AppContext, SessionData } from "./interfaces";
 import express from "express";
@@ -11,6 +10,7 @@ import { asyncHandler } from "./utils/asyncHandler";
 import { cafeRouter } from "./routers/cafe.router";
 import { userRouter } from "./routers/user.router";
 import { cityRouter } from "./routers/city,router";
+import { criteriaRouter } from "./routers/criteria.router";
 
 async function bootstrap() {
   const app = express();
@@ -18,10 +18,6 @@ async function bootstrap() {
 
   // Создание экземпляра бота
   const bot = new Bot<AppContext>(process.env.TELEGRAM_BOT_TOKEN!);
-
-  // Инициализация базы данных
-  const databaseService = new DatabaseService();
-  await databaseService.initialize();
 
   // Настройка сессии
   bot.use(
@@ -45,7 +41,7 @@ async function bootstrap() {
   app.use("/api/cafe", cafeRouter);
   app.use("/api/users", userRouter);
   app.use("/api/cities", cityRouter);
-
+  app.use("/api/criteria", criteriaRouter);
   // Запуск бота
   //bot.start();
   //console.log("Bot is running...");

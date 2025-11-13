@@ -1,7 +1,5 @@
-import { Bot, InlineKeyboard, Keyboard } from "grammy";
+import { Bot, Keyboard } from "grammy";
 import { AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { Review } from "../../../entities/review";
 import { isAdmin } from "../../bot";
 
 export const setupReviewAdmin = (bot: Bot<AppContext>) => {

@@ -1,12 +1,8 @@
 import { Router } from "express";
-import { AppDataSource } from "../services/database";
-import { City } from "../entities/city";
-import { Cafe } from "../entities/cafe";
-import { Review } from "../entities/review";
-import { Criteria } from "../entities/types/criteria";
-import { Between } from "typeorm";
-import { User } from "../entities/user";
+import { prismaClient } from "../db";
 import { ImageService } from "../services/image";
+import { checkToxic } from "../utils/helpers";
+import { ReviewStatus } from "@prisma/client";
 
 const router = Router();
 
@@ -18,15 +14,15 @@ router.get("/catalog", async (req, res, next) => {
     return;
   }
 
-  const cityRepo = AppDataSource.getRepository(City),
-    cafeRepo = AppDataSource.getRepository(Cafe);
+  const cityRepo = prismaClient.city,
+    cafeRepo = prismaClient.cafe;
 
-  if (!(await cityRepo.findOneBy({ name: city }))) {
+  if (!(await cityRepo.findUnique({ where: { name: city } }))) {
     res.status(400).end();
     return;
   }
 
-  const cafeList = await cafeRepo.findBy({ city: { name: city } });
+  const cafeList = await cafeRepo.findMany({ where: { city: { name: city } } });
 
   res.json({
     data: await Promise.all(
@@ -46,18 +42,26 @@ router.get("/rating/personal", async (req, res, next) => {
     return;
   }
 
-  const cafeRepo = AppDataSource.getRepository(Cafe),
-    userRepo = AppDataSource.getRepository(User);
+  const cafeRepo = prismaClient.cafe,
+    userRepo = prismaClient.user;
 
-  const user = await userRepo.findOneBy({ tgId: req["user"]["id"] });
+  const user = await userRepo.findUnique({
+    where: { tgId: req["user"]["id"] },
+    include: { criteria: true },
+  });
 
   if (!user) {
     res.status(404).end();
     return;
   }
 
-  const cafeList = await cafeRepo.find({
-    relations: { reviews: true },
+  if (user.criteria.length === 0) {
+    res.json({ data: [] });
+    return;
+  }
+
+  const cafeList = await cafeRepo.findMany({
+    include: { reviews: { include: { criteria: true } } },
     where: { city: { name: city } },
   });
 
@@ -67,36 +71,46 @@ router.get("/rating/personal", async (req, res, next) => {
       continue;
     }
 
-    const reviewCount = cafe.reviews.length;
+    let totalWeightedScore = 0;
+    let totalEffectiveWeight = 0;
 
-    let aroma = 0;
-    let taste = 0;
-    let atmosphere = 0;
-    let speed = 0;
+    for (const review of cafe.reviews.filter(
+      (el) => el.status === ReviewStatus.APPROVED
+    )) {
+      // Для каждого отзыва считаем взвешенную оценку по ТЗ
+      const activeRatings = [];
+      let reviewTotalWeight = 0;
 
-    for (const review of cafe.reviews) {
-      aroma += review.criteria.aroma;
-      taste += review.criteria.taste;
-      atmosphere += review.criteria.atmosphere;
-      speed += review.criteria.speed;
+      // Собираем активные критерии отзыва
+      for (const criteriaReview of review.criteria) {
+        const userCriterion = user.criteria.find(
+          (uc) => uc.criteriaId === criteriaReview.criteriaId
+        );
+        if (userCriterion) {
+          activeRatings.push({
+            rating: criteriaReview.mark,
+            weight: userCriterion.weight,
+          });
+          reviewTotalWeight += userCriterion.weight;
+        }
+      }
+
+      // Если в отзыве есть хотя бы 2 критерия (по ТЗ)
+      if (activeRatings.length >= 2 && reviewTotalWeight > 0) {
+        const reviewScore = activeRatings.reduce(
+          (score, { rating, weight }) => {
+            return score + (rating * weight) / reviewTotalWeight;
+          },
+          0
+        );
+
+        totalWeightedScore += reviewScore;
+        totalEffectiveWeight += 1; // Каждый отзыв с валидными критериями
+      }
     }
 
-    const avgAroma = aroma / reviewCount;
-    const avgTaste = taste / reviewCount;
-    const avgAtmosphere = atmosphere / reviewCount;
-    const avgSpeed = speed / reviewCount;
-
-    const score =
-      (user.criteria.aroma * avgAroma +
-        user.criteria.atmosphere * avgAtmosphere +
-        user.criteria.speed * avgSpeed +
-        user.criteria.taste * avgTaste) /
-      (user.criteria.aroma +
-        user.criteria.atmosphere +
-        user.criteria.speed +
-        user.criteria.taste || 1);
-
-    cafe["score"] = score;
+    cafe["score"] =
+      totalEffectiveWeight > 0 ? totalWeightedScore / totalEffectiveWeight : 0;
   }
 
   cafeList.sort((a, b) => b["score"] - a["score"]);
@@ -119,30 +133,36 @@ router.get("/rating", async (req, res, next) => {
     return;
   }
 
-  const cafeRepo = AppDataSource.getRepository(Cafe);
+  const cafeRepo = prismaClient.cafe;
 
-  const cafeList = await cafeRepo.find({
-    relations: { reviews: true },
+  const cafeList = await cafeRepo.findMany({
+    include: { reviews: { include: { criteria: true } } },
     where: { city: { name: city } },
   }); //.filter((cafe) => cafe.reviews.length >= 100);
 
   for (const cafe of cafeList) {
-    let taste = 0,
-      atmosphere = 0,
-      speed = 0,
-      aroma = 0;
-    for (const review of cafe.reviews) {
-      aroma += review.criteria.aroma;
-      taste += review.criteria.taste;
-      atmosphere += review.criteria.atmosphere;
-      speed += review.criteria.speed;
+    if (cafe.reviews.length === 0) {
+      cafe["score"] = 0;
+      continue;
     }
-    aroma /= cafe.reviews.length || 1;
-    taste /= cafe.reviews.length || 1;
-    atmosphere /= cafe.reviews.length || 1;
-    speed /= cafe.reviews.length || 1;
 
-    cafe["score"] = (aroma + taste + atmosphere + speed) / 4;
+    let totalScore = 0;
+    let validReviewsCount = 0;
+
+    for (const review of cafe.reviews.filter(
+      (el) => el.status === ReviewStatus.APPROVED
+    )) {
+      // Учитываем только отзывы с минимум 2 критериями
+      if (review.criteria.length >= 2) {
+        const reviewScore =
+          review.criteria.reduce((sum, cr) => sum + cr.mark, 0) /
+          review.criteria.length;
+        totalScore += reviewScore;
+        validReviewsCount++;
+      }
+    }
+
+    cafe["score"] = validReviewsCount > 0 ? totalScore / validReviewsCount : 0;
   }
 
   cafeList.sort((a, b) => b["score"] - a["score"]);
@@ -160,10 +180,16 @@ router.get("/rating", async (req, res, next) => {
 router.get("/:id", async (req, res, next) => {
   const { id } = req.params;
 
-  const cafeRepo = AppDataSource.getRepository(Cafe);
-  const cafe = await cafeRepo.findOne({
+  const cafeRepo = prismaClient.cafe;
+  const cafe = await cafeRepo.findFirst({
     where: { id: +id },
-    relations: { reviews: true },
+    include: {
+      reviews: {
+        where: { status: ReviewStatus.APPROVED },
+        include: { criteria: { include: { criteria: true } } },
+      },
+      city: true,
+    },
   });
 
   if (!cafe) {
@@ -171,21 +197,18 @@ router.get("/:id", async (req, res, next) => {
     return;
   }
 
-  let taste = 0,
-    atmosphere = 0,
-    speed = 0,
-    aroma = 0;
+  // Расчет общего рейтинга
+  let totalScoreSum = 0;
+  let totalScoresCount = 0;
+
   for (const review of cafe.reviews) {
-    aroma += review.criteria.aroma;
-    taste += review.criteria.taste;
-    atmosphere += review.criteria.atmosphere;
-    speed += review.criteria.speed;
+    for (const criteriaReview of review.criteria) {
+      totalScoreSum += criteriaReview.mark;
+      totalScoresCount++;
+    }
   }
-  aroma /= cafe.reviews.length || 1;
-  taste /= cafe.reviews.length || 1;
-  atmosphere /= cafe.reviews.length || 1;
-  speed /= cafe.reviews.length || 1;
-  cafe["score"] = (aroma + taste + atmosphere + speed) / 4;
+
+  cafe["score"] = totalScoresCount > 0 ? totalScoreSum / totalScoresCount : 0;
 
   cafe.reviews.sort((a, b) =>
     new Date(a.createdAt) < new Date(b.createdAt) ? 1 : -1
@@ -199,21 +222,29 @@ router.get("/:id", async (req, res, next) => {
 router.get("/:id/review", async (req, res, next) => {
   const { id } = req.params;
 
-  const reviewRepo = AppDataSource.getRepository(Review);
+  const reviewRepo = prismaClient.review;
 
-  const reviewList = await reviewRepo.findBy({ cafe: { id: +id } });
+  const reviewList = await reviewRepo.findMany({
+    where: { cafe: { id: +id }, status: ReviewStatus.APPROVED },
+  });
 
   res.json({ data: reviewList });
 });
 
 router.post("/:id/review", async (req, res, next) => {
   const { id } = req.params;
-  const { criteria, text }: { criteria: Criteria; text: string } = req.body;
+  const {
+    criteria,
+    text,
+  }: { criteria: { [key: string]: number }[]; text: string } = req.body;
 
-  const reviewRepo = AppDataSource.getRepository(Review),
-    userRepo = AppDataSource.getRepository(User);
+  const reviewRepo = prismaClient.review,
+    userRepo = prismaClient.user,
+    criteriaRepo = prismaClient.criteria;
 
-  const user = await userRepo.findOneBy({ tgId: req["user"]["id"] });
+  const user = await userRepo.findUnique({
+    where: { tgId: req["user"]["id"] },
+  });
   if (!user) {
     res.status(401).end();
     return;
@@ -221,13 +252,13 @@ router.post("/:id/review", async (req, res, next) => {
 
   {
     const twentyFourHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
-    const review = await reviewRepo.findOne({
+    const review = await reviewRepo.findFirst({
       where: {
         user: { tgId: req["user"]["id"] },
-        createdAt: Between(twentyFourHoursAgo, new Date()),
+        createdAt: { gte: twentyFourHoursAgo, lte: new Date() },
       },
-      order: {
-        createdAt: "DESC",
+      orderBy: {
+        createdAt: "desc",
       },
     });
 
@@ -238,23 +269,49 @@ router.post("/:id/review", async (req, res, next) => {
   }
 
   if (
-    await reviewRepo.findOneBy({
-      user: { tgId: req["user"]["id"] },
-      cafe: { id: +id },
+    await reviewRepo.findFirst({
+      where: {
+        user: { tgId: req["user"]["id"] },
+        cafe: { id: +id },
+      },
     })
   ) {
     res.status(403).end();
     return;
   }
 
-  const review = reviewRepo.create({
-    criteria,
-    text,
-    cafe: { id: +id },
-    user,
-  });
+  let status: ReviewStatus;
+  const toxicity = await checkToxic(text);
+  if (toxicity < 0.3) status = ReviewStatus.APPROVED;
+  else if (toxicity >= 0.3 && toxicity < 0.7) status = ReviewStatus.MODERATION;
+  else status = ReviewStatus.REJECTED;
 
-  await reviewRepo.save(review);
+  const review = await reviewRepo.create({
+    data: {
+      text,
+      status,
+      cafe: { connect: { id: +id } },
+      user: { connect: { id: user.id } },
+      criteria: {
+        createMany: {
+          data: await Promise.all(
+            criteria.map(async (el) => {
+              const key = Object.keys(el)[0],
+                value = Object.values(el)[0];
+              const criteria = await criteriaRepo.findUnique({
+                where: { name: key },
+              });
+              return {
+                mark: value,
+                criteriaId: criteria.id,
+              };
+            })
+          ),
+        },
+      },
+    },
+    include: { cafe: true },
+  });
 
   res.status(201).json({ data: review });
 });
@@ -262,16 +319,19 @@ router.post("/:id/review", async (req, res, next) => {
 router.patch("/review/:rid", async (req, res, next) => {
   const { rid } = req.params;
 
-  const body: { criteria?: Criteria; text?: string } = req.body;
+  const body: {
+    criteria?: { mark: number; criteriaId: number }[];
+    text?: string;
+  } = req.body;
 
-  const reviewRepo = AppDataSource.getRepository(Review);
+  const reviewRepo = prismaClient.review;
 
   {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const review = await reviewRepo.findOne({
+    const review = await reviewRepo.findFirst({
       where: {
         user: { tgId: req["user"]["id"] },
-        createdAt: Between(twentyFourHoursAgo, new Date()),
+        createdAt: { gte: twentyFourHoursAgo, lte: new Date() },
         id: +rid,
       },
     });
@@ -287,18 +347,26 @@ router.patch("/review/:rid", async (req, res, next) => {
     }
   }
 
-  const review = await reviewRepo.findOne({
+  let review = await reviewRepo.findFirst({
     where: { id: +rid },
-    relations: { cafe: true },
   });
 
-  await reviewRepo.save({
-    ...review,
-    ...body,
-    updateCount: review.updateCount + 1,
-  });
+  let status: ReviewStatus = ReviewStatus.APPROVED;
+  if (body?.text) {
+    const toxicity = await checkToxic(body.text);
+    if (toxicity >= 0.3 && toxicity < 0.7) status = ReviewStatus.MODERATION;
+    else status = ReviewStatus.REJECTED;
+  }
 
-  await reviewRepo.update({ id: +rid }, { ...body });
+  review = await reviewRepo.update({
+    where: { id: review.id },
+    data: {
+      text: body?.text,
+      status,
+      criteria: { createMany: { data: body?.criteria.map((el) => el) } },
+      updateCount: review.updateCount + 1,
+    },
+  });
 
   res.json({ data: review });
 });

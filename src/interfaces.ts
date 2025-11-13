@@ -1,8 +1,5 @@
+import { Prisma } from "@prisma/client";
 import { Context, SessionFlavor } from "grammy";
-import { Cafe } from "./entities/cafe";
-import { City } from "./entities/city";
-import { Review } from "./entities/review";
-import { User } from "./entities/user";
 
 export type AdminAction =
   | "add_cafe"
@@ -24,10 +21,14 @@ export interface SessionData {
   adminEditingCafeId?: number;
   adminEditingCityId?: number;
 
-  cafeData?: Partial<Cafe & { skipOwner: boolean }>;
-  cityData?: Partial<City>;
-  reviewData?: Partial<Review>;
-  userData?: Partial<User>;
+  cafeData?: Partial<
+    Prisma.CafeGetPayload<{ include: { user: true; city: true } }> & {
+      skipOwner: boolean;
+    }
+  >;
+  cityData?: Partial<Prisma.CityGetPayload<{}>>;
+  reviewData?: Partial<Prisma.ReviewGetPayload<{}>>;
+  userData?: Partial<Prisma.UserGetPayload<{}>>;
 }
 
 export type AppContext = Context & SessionFlavor<SessionData>;

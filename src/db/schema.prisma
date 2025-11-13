@@ -1,0 +1,220 @@
+generator client {
+  provider  = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SocialNetworkType {
+  INSTAGRAM
+  VK
+  TELEGRAM
+  MAX
+}
+
+model SocialNetwork {
+  id          Int         @id @default(autoincrement())
+  type        SocialNetworkType
+  link        String      @db.VarChar()
+  cafeInfoId  Int         @map("cafe_info_id")
+  cafeInfo    CafeInfo    @relation(fields: [cafeInfoId], references: [id], onDelete: Cascade)
+}
+
+model Cafe {
+  id              Int      @id @default(autoincrement())
+
+  name            String   @db.VarChar
+  description     String   @unique @db.VarChar
+  avatar          String   @db.VarChar
+  ownerId         Int?     @map("owner_id")
+  cityId          Int?     @map("city_id")
+  address         String[] @db.VarChar
+  schedule        CafeSchedule? 
+  city            City?    @relation(fields: [cityId], references: [id], onUpdate: NoAction)
+  user            User?    @relation(fields: [ownerId], references: [id], onUpdate: NoAction)
+
+  info            CafeInfo?
+  bages           CafeBage[]
+
+  reviews         Review[]
+  editors         Editor[]
+  posts           Post[]
+
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime @default(now()) @db.Timestamp(6)
+}
+
+model CafeInfo {
+  id              Int       @id @default(autoincrement())
+  cafeId          Int       @map("cafe_id") @unique
+  phones          String[]  @db.VarChar()
+  email           String?   @db.VarChar()
+  cafe            Cafe      @relation(fields: [cafeId], references: [id], onDelete: Cascade)
+  socialNetworks  SocialNetwork[]
+}
+
+model CafeBage {
+  id              Int     @id @default(autoincrement())
+  name            String  @db.VarChar()
+  cafeId          Int     @map("cafe_id") @unique
+  cafe            Cafe    @relation(fields: [cafeId], references: [id], onDelete: Cascade)
+}
+
+model CafeSchedule {
+  id                Int       @id @default(autoincrement())
+  cafeId            Int       @unique @map("cafe_id")
+
+  scheduleMonday    String?   @map("schedule_monday")    @db.VarChar()
+  scheduleTuesday   String?   @map("schedule_tuesday")   @db.VarChar()
+  scheduleWednesday String?   @map("schedule_wednesday") @db.VarChar()
+  scheduleThursday  String?   @map("schedule_thursday")  @db.VarChar()
+  scheduleFriday    String?   @map("schedule_friday")    @db.VarChar()
+  scheduleSaturday  String?   @map("schedule_saturday")  @db.VarChar()
+  scheduleSunday    String?   @map("schedule_sunday")    @db.VarChar()
+  scheduleNotes     String?   @map("schedule_notes")     @db.VarChar()
+
+  cafe              Cafe      @relation(fields: [cafeId], references: [id], onDelete: Cascade)
+}
+
+model Editor {
+  id          Int   @id @default(autoincrement())
+  userId      Int?  @unique @map("user_id")
+  cafeId      Int   @map("cafe_id")
+  user        User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cafe        Cafe  @relation(fields: [cafeId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id          Int @id @default(autoincrement())
+  title       String @db.VarChar()
+  text        String @db.VarChar()
+  cafeId      Int? @map("cafe_id")
+  cafe        Cafe? @relation(fields: [cafeId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @default(now()) @db.Timestamp(6)
+}
+
+model Promotion {
+  id          Int @id @default(autoincrement())
+  title       String @db.VarChar()
+  description String @db.VarChar()
+  dateStart   DateTime @default(now()) @db.Timestamp(6)
+  dateEnd     DateTime @db.Timestamp(6)
+  condition   String? @db.VarChar()
+}
+
+model City {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar
+  cafe Cafe[]
+  user User[]
+}
+
+enum ReviewStatus {
+  APPROVED
+  MODERATION
+  REJECTED
+  BLOCKED
+}
+
+model Review {
+  id          Int           @id @default(autoincrement())
+  text        String        @db.VarChar
+  createdAt   DateTime      @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime      @default(now()) @db.Timestamp(6)
+  updateCount Int           @default(0)
+  status      ReviewStatus  @default(APPROVED)
+  userId      Int?          @map("user_id")
+  cafeId      Int?          @map("cafe_id")
+  criteria    CriteriaReview[]
+  cafe        Cafe?          @relation(fields: [cafeId], references: [id], onUpdate: NoAction)
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+}
+
+enum UserRole {
+  BASIC
+  BUSINESS
+  MODERATOR
+  ADMIN
+}
+
+model User {
+  id                Int       @id @default(autoincrement())
+  tgId              BigInt    @unique
+  cityId            Int?      @map("city_id")
+  role              UserRole  @default(BASIC)
+  cafe              Cafe[]
+  reviews           Review[]
+  criteria          CriteriaUser[]
+  city              City?     @relation(fields: [cityId], references: [id], onUpdate: NoAction)
+  businessRequests  BusinessRequest[]
+  editor            Editor?
+  reports           Report[]
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @default(now()) @db.Timestamp(6)
+}
+
+model Criteria {
+  id             Int      @id @default(autoincrement())
+  name           String   @unique @db.VarChar
+  CriteriaReview CriteriaReview[]
+  CriteriaUser   CriteriaUser[]
+}
+
+model CriteriaReview {
+  id         Int @id @default(autoincrement())
+  mark       Int @db.Integer
+  criteriaId Int @map("criteria_id")
+  reviewId   Int @map("review_id")
+  criteria   Criteria @relation(fields: [criteriaId], references: [id], onUpdate: NoAction, onDelete: Cascade)
+  review     Review @relation(fields: [reviewId], references: [id], onUpdate: NoAction, onDelete: Cascade)
+
+  @@unique([reviewId, criteriaId])
+}
+
+model CriteriaUser {
+  id         Int      @id @default(autoincrement())
+  weight     Float    @db.Real
+  criteriaId Int      @map("criteria_id")
+  userId     Int      @map("user_id")
+  criteria   Criteria @relation(fields: [criteriaId], references: [id], onUpdate: NoAction)
+  user       User     @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: Cascade)
+
+  @@unique([userId, criteriaId])
+}
+
+enum SocialNetworkRequest {
+  INSTAGRAM
+  VK
+}
+
+model BusinessRequest {
+  id            Int       @id @default(autoincrement())
+  cafeName      String    @map("cafe_name") @db.VarChar()
+  cafeUsername  String    @map("cafe_username") @db.VarChar()
+  code          String    @db.VarChar() @default(nanoid())
+  socialNetwork SocialNetworkRequest
+  ownerId       Int?      @map("owner_id")
+  owner         User?     @relation(fields: [ownerId], references: [id], onUpdate: NoAction, onDelete: SetNull)
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @db.Timestamp(6)
+}
+
+enum ReportType {
+  CAFE
+  POST
+  PROMOTION
+  REVIEW
+}
+
+model Report {
+  id            Int @id @default(autoincrement())
+  type          ReportType
+  text          String? @db.VarChar()
+  userId        Int? @map("user_id")
+  user          User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @db.Timestamp(6)
+}

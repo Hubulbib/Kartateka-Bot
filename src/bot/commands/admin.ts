@@ -1,14 +1,10 @@
-import { Bot, InlineKeyboard, Keyboard } from "grammy";
-import { AdminAction, AppContext } from "../../interfaces.js";
+import { Bot, Keyboard } from "grammy";
+import { AppContext } from "../../interfaces.js";
 import { isAdmin } from "../bot.js";
 import { setupCafeAdmin } from "./admin/admin-cafe.js";
 import { setupCityAdmin } from "./admin/admin-city.js";
 import { setupReviewAdmin } from "./admin/admin-review.js";
 import { setupUserAdmin } from "./admin/admin-user.js";
-import { Cafe } from "../../entities/cafe.js";
-import { City } from "../../entities/city.js";
-import { AppDataSource } from "../../services/database.js";
-import { handleAddCafe } from "../handlers/admin/admin-cafe.js";
 
 export const setupAdminCommands = async (bot: Bot<AppContext>) => {
   // Команда для входа в админ-панель

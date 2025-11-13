@@ -7,6 +7,7 @@ const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 export class ImageService {
   static getImage = async (fileId: string) => {
     // Проверка кэша
+    if (!fileId) return;
     if (imageCache.has(fileId)) {
       return imageCache.get(fileId);
     }

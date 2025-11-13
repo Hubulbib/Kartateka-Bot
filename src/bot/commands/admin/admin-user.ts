@@ -1,7 +1,6 @@
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { User } from "../../../entities/user";
+import { prismaClient } from "../../../db";
 import { isAdmin } from "../../bot";
 
 export const setupUserAdmin = (bot: Bot<AppContext>) => {
@@ -27,9 +26,9 @@ export const setupUserAdmin = (bot: Bot<AppContext>) => {
   });
 
   async function sendUserList(ctx: AppContext, skip: number) {
-    const userRepo = AppDataSource.getRepository(User);
-    const users = await userRepo.find({
-      order: { id: "ASC" },
+    const userRepo = prismaClient.user;
+    const users = await userRepo.findMany({
+      orderBy: { id: "asc" },
       take: 10,
       skip,
     });
