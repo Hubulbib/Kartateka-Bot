@@ -2,11 +2,8 @@ import { AppContext } from "../../interfaces";
 import { handleAddCafe, handleEditCafe } from "../handlers/admin/admin-cafe";
 import { handleAddCity, handleEditCity } from "../handlers/admin/admin-city";
 
-export const adminEventsInit = async (
-  ctx: AppContext,
-  isAdmin: (ctx: AppContext) => boolean
-) => {
-  if (!isAdmin(ctx) || !ctx.session.adminAction) return;
+export const adminEventsInit = async (ctx: AppContext, isAdmin: boolean) => {
+  if (!isAdmin || !ctx.session.adminAction) return;
 
   switch (ctx.session.adminAction) {
     case "add_cafe":

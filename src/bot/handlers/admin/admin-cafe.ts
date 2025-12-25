@@ -1,14 +1,11 @@
 import { InlineKeyboard } from "grammy";
 import { AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { City } from "../../../entities/city";
-import { User } from "../../../entities/user";
-import { Cafe } from "../../../entities/cafe";
+import { prismaClient } from "../../../db";
 
 export async function handleAddCafe(ctx: AppContext) {
-  const cityRepo = AppDataSource.getRepository(City);
-  const userRepo = AppDataSource.getRepository(User);
-  const cafeRepo = AppDataSource.getRepository(Cafe);
+  const cityRepo = prismaClient.city;
+  const userRepo = prismaClient.user;
+  const cafeRepo = prismaClient.cafe;
 
   if (!ctx.session.cafeData) {
     ctx.session.cafeData = {};
@@ -66,7 +63,7 @@ export async function handleAddCafe(ctx: AppContext) {
     );
   }
 
-  if (!cafeData?.owner?.tgId) {
+  if (!cafeData?.user?.tgId) {
     if (!ctx.message.text) {
       await ctx.reply("Введите Telegram ID владельца кафе (число):");
       return;
@@ -81,20 +78,20 @@ export async function handleAddCafe(ctx: AppContext) {
     // Шаг 5: Владелец (опционально)
     if (tgId !== 0) {
       // Проверяем существование пользователя
-      const owner = await userRepo.findOneBy({ tgId });
+      const owner = await userRepo.findUnique({ where: { tgId } });
       if (!owner) {
         await ctx.reply(
           "Пользователь с таким Telegram ID не найден. Введите другой ID:"
         );
         return;
       }
-      cafeData.owner = owner; // Сохраняем ссылку на владельца
+      cafeData.user = owner; // Сохраняем ссылку на владельца
     } else {
-      cafeData.owner = null;
+      cafeData.user = null;
     }
 
     // Выбор города
-    const cities = await cityRepo.find();
+    const cities = await cityRepo.findMany();
     if (cities.length === 0) {
       await ctx.reply("Нет городов в базе. Сначала добавьте город.");
       ctx.session.cafeData = undefined;
@@ -116,16 +113,23 @@ export async function handleAddCafe(ctx: AppContext) {
     return;
   }
 
-  // Все данные собраны — сохраняем кафе
-  const cafe = cafeRepo.create({
-    name: cafeData.name,
-    description: cafeData.description,
-    avatar: cafeData.avatar,
-    address: cafeData.address,
-    city: await cityRepo.findOneBy({ id: cafeData.city.id }),
-    owner: await userRepo.findOneBy({ tgId: cafeData.owner.tgId }), // Находим владельца по tgId
+  const city = await cityRepo.findFirst({ where: { id: cafeData.city.id } });
+  const user = await userRepo.findUnique({
+    where: { tgId: cafeData.user.tgId },
   });
-  await cafeRepo.save(cafe);
+
+  // Все данные собраны — сохраняем кафе
+  const cafe = await cafeRepo.create({
+    data: {
+      name: cafeData.name,
+      description: cafeData.description,
+      avatar: cafeData.avatar,
+      address: cafeData.address,
+      city: { connect: { id: city.id } },
+      user: { connect: { id: user.id } }, // Находим владельца по tgId
+    },
+  });
+
   ctx.session.cafeData = undefined;
   await ctx.reply(`✅ Кафе "${cafe.name}" успешно добавлено!`);
 }
@@ -134,11 +138,11 @@ export async function handleAddCafe(ctx: AppContext) {
 export async function handleEditCafe(ctx: AppContext) {
   if (!ctx.session.adminEditingCafeId) return;
 
-  const cafeRepo = AppDataSource.getRepository(Cafe);
-  const userRepo = AppDataSource.getRepository(User);
-  const cafe = await cafeRepo.findOne({
+  const cafeRepo = prismaClient.cafe;
+  const userRepo = prismaClient.user;
+  const cafe = await cafeRepo.findFirst({
     where: { id: ctx.session.adminEditingCafeId },
-    relations: ["city", "owner"],
+    include: { city: true, user: true },
   });
 
   if (!cafe) return;
@@ -161,20 +165,32 @@ export async function handleEditCafe(ctx: AppContext) {
       return;
     }
 
-    const owner = await userRepo.findOneBy({ tgId });
+    const owner = await userRepo.findUnique({ where: { tgId } });
     if (!owner) {
       await ctx.reply(
         "Пользователь с таким Telegram ID не найден. Введите другой ID:"
       );
       return;
     }
-    cafe.owner = owner;
+    cafe.user = owner;
   } else {
     await ctx.reply("Пожалуйста, отправьте корректные данные:");
     return;
   }
 
-  await cafeRepo.save(cafe);
+  await cafeRepo.update({
+    where: { id: cafe.id },
+    data: {
+      name: cafe.name,
+      description: cafe.description,
+      avatar: cafe.avatar,
+      address: cafe.address,
+      user: cafe.user
+        ? { connect: { id: cafe.user.id } }
+        : { disconnect: true },
+      city: cafe.city ? { connect: { id: cafe.city.id } } : undefined,
+    },
+  });
   ctx.session.adminAction = undefined;
   ctx.session.adminEditingCafeId = undefined;
 

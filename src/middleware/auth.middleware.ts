@@ -1,7 +1,6 @@
 import { parse } from "@telegram-apps/init-data-node";
 import { NextFunction, Request, Response } from "express";
-import { AppDataSource } from "../services/database";
-import { User } from "../entities/user";
+import { prismaClient } from "../db";
 
 export const authMiddleware = async (
   req: Request,
@@ -11,7 +10,7 @@ export const authMiddleware = async (
   const initData = req.headers["x-telegram-init-data"] as string;
 
   if (!initData) {
-    return res.status(401);
+    return res.status(401).end();
   }
 
   try {
@@ -20,20 +19,20 @@ export const authMiddleware = async (
     const parsedData = parse(decodedInitData);
 
     if (!parsedData.user) {
-      return res.status(401);
+      return res.status(401).end();
     }
 
-    const userRepo = AppDataSource.getRepository(User);
+    const userRepo = prismaClient.user;
 
-    let user = await userRepo.findOne({
+    let user = await userRepo.findUnique({
       where: { tgId: parsedData.user.id },
     });
     if (!user) {
-      user = userRepo.create({
-        tgId: parsedData.user.id,
-        criteria: { aroma: 1.0, atmosphere: 1.3, speed: 1.5, taste: 1.7 },
+      user = await userRepo.create({
+        data: {
+          tgId: parsedData.user.id,
+        },
       });
-      await userRepo.save(user);
     }
 
     req["user"] = parsedData.user;
