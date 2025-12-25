@@ -13,6 +13,9 @@ RUN npm install
 # Копируем исходный код приложения
 COPY . .
 
+# Генерируем Prisma Client
+RUN npm run prisma:generate
+
 # Собираем TypeScript в JavaScript
 RUN npm run build
 
@@ -20,4 +23,4 @@ RUN npm run build
 EXPOSE 5000
 
 # Указываем команду для запуска приложения
-CMD ["node", "dist/app.js"]
+CMD ["sh", "-c", "npm run prisma:migrate:deploy && node dist/app.js"]
