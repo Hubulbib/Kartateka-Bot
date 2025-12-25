@@ -1,15 +1,16 @@
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import { AppContext } from "../interfaces";
-import { getMainMenu, setupMenu } from "./commands/menu";
+import { getMainMenu } from "./commands/menu";
 import { prismaClient } from "../db";
 import { CONSTANTS } from "../const";
 import { setupAdminCommands } from "./commands/admin";
 import { adminEventsInit } from "./events/admin";
+import { UserRole } from "@prisma/client";
 
-const ADMIN_IDS = process.env.ADMIN_IDS?.split(",").map(Number) || [];
-
-export const isAdmin = (ctx: AppContext) => {
-  return ctx.from && ADMIN_IDS.includes(ctx.from.id);
+export const getUserRole = async (ctx: AppContext) => {
+  const userRepo = prismaClient.user;
+  const user = await userRepo.findUnique({ where: { tgId: ctx.from.id } });
+  return user?.role || UserRole.BASIC;
 };
 
 export const setupBot = async (bot: Bot<AppContext>) => {
@@ -20,8 +21,6 @@ export const setupBot = async (bot: Bot<AppContext>) => {
 
   // Приветственное сообщение
   bot.command("start", async (ctx) => {
-    const isAdmin = ctx.from && ADMIN_IDS.includes(ctx.from.id);
-
     const userRepo = prismaClient.user;
 
     let user = await userRepo.findUnique({ where: { tgId: ctx.from.id } });
@@ -35,7 +34,11 @@ export const setupBot = async (bot: Bot<AppContext>) => {
 
     await ctx.reply(CONSTANTS.HELLO_TEXT, {
       parse_mode: "HTML",
-      reply_markup: getMainMenu(isAdmin),
+      reply_markup: getMainMenu(await getUserRole(ctx)),
+    });
+
+    await ctx.reply("Выберите действие: ", {
+      reply_markup: getMainMenu(await getUserRole(ctx)),
     });
   });
 
@@ -47,11 +50,19 @@ export const setupBot = async (bot: Bot<AppContext>) => {
     await ctx.reply(CONSTANTS.SUPPORT_TEXT, { parse_mode: "HTML" });
   });
 
-  bot.hears("◀️ Назад", async (ctx) => {
-    const isAdmin = ctx.from && ADMIN_IDS.includes(ctx.from.id);
+  bot.hears("🏢 Мои кафе", async (ctx) => {
+    const keyboard = new InlineKeyboard().webApp(
+      "🏢 Бизнес-панель",
+      process.env.BUSINESS_WEB_APP_URL!
+    );
+    await ctx.reply("Нажмите ниже, чтобы перейти в бизнес-панель", {
+      reply_markup: keyboard,
+    });
+  });
 
+  bot.hears("◀️ Назад", async (ctx) => {
     await ctx.reply("Главное меню:", {
-      reply_markup: getMainMenu(isAdmin),
+      reply_markup: getMainMenu(await getUserRole(ctx)),
     });
   });
 
@@ -59,12 +70,10 @@ export const setupBot = async (bot: Bot<AppContext>) => {
   bot.callbackQuery("back_to_menu", async (ctx) => {
     await ctx.answerCallbackQuery();
 
-    const isAdmin = ctx.from && ADMIN_IDS.includes(ctx.from.id);
-
     await ctx.editMessageText("Главное меню:");
 
     await ctx.reply("Выберите действие: ", {
-      reply_markup: getMainMenu(isAdmin),
+      reply_markup: getMainMenu(await getUserRole(ctx)),
     });
   });
 
@@ -72,12 +81,13 @@ export const setupBot = async (bot: Bot<AppContext>) => {
   await setupAdminCommands(bot);
 
   bot.on("message", async (ctx, next) => {
-    if (isAdmin(ctx) && ctx.session.adminAction) {
-      await adminEventsInit(ctx, isAdmin);
+    const userRole = await getUserRole(ctx);
+    if (userRole === UserRole.ADMIN && ctx.session.adminAction) {
+      await adminEventsInit(ctx, true);
       return next();
     } else {
       await ctx.reply("Выберите действие:", {
-        reply_markup: getMainMenu(isAdmin(ctx)),
+        reply_markup: getMainMenu(userRole),
       });
       return next();
     }

@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 
 const imageCache = new Map<string, string>();
 
@@ -22,5 +22,15 @@ export class ImageService {
     setTimeout(() => imageCache.delete(fileId), 60 * 60 * 1000);
 
     return fileUrl;
+  };
+
+  static saveImage = async (file: Express.Multer.File, tgId: number) => {
+    const inputFile = new InputFile(file.buffer, file.originalname);
+
+    const message = await bot.api.sendPhoto(tgId, inputFile, {
+      caption: `🖼 Аватар от пользователя: ${tgId}`,
+    });
+
+    return message.photo[message.photo.length - 1];
   };
 }

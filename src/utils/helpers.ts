@@ -21,9 +21,6 @@ export const checkToxic = async (text: string): Promise<number> => {
     }
   );
   const data = await res.json();
-  console.log(
-    data["attributeScores"]["TOXICITY"]["spanScores"][0]["score"]["value"]
-  );
   return data["attributeScores"]["TOXICITY"]["spanScores"][0]["score"][
     "value"
   ] as number;

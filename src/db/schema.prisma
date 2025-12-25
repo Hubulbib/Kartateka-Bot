@@ -41,15 +41,18 @@ model Cafe {
   reviews         Review[]
   editors         Editor[]
   posts           Post[]
+  promotions      Promotion[]
 
   createdAt       DateTime @default(now()) @db.Timestamp(6)
   updatedAt       DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([name])
 }
 
 model CafeInfo {
   id              Int       @id @default(autoincrement())
   cafeId          Int       @map("cafe_id") @unique
-  phones          String[]  @db.VarChar()
+  phones          String[]  @db.VarChar() @default([])
   email           String?   @db.VarChar()
   cafe            Cafe      @relation(fields: [cafeId], references: [id], onDelete: Cascade)
   socialNetworks  SocialNetwork[]
@@ -92,6 +95,7 @@ model Post {
   text        String @db.VarChar()
   cafeId      Int? @map("cafe_id")
   cafe        Cafe? @relation(fields: [cafeId], references: [id], onDelete: SetNull)
+  media       String[] @default([])
   createdAt   DateTime @default(now()) @db.Timestamp(6)
   updatedAt   DateTime @default(now()) @db.Timestamp(6)
 }
@@ -103,6 +107,11 @@ model Promotion {
   dateStart   DateTime @default(now()) @db.Timestamp(6)
   dateEnd     DateTime @db.Timestamp(6)
   condition   String? @db.VarChar()
+  media       String[] @default([])
+  cafeId      Int? @map("cafe_id")
+  cafe        Cafe? @relation(fields: [cafeId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @default(now()) @db.Timestamp(6)
 }
 
 model City {

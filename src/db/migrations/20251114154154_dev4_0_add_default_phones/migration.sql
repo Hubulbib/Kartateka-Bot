@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "CafeInfo" ALTER COLUMN "phones" SET DEFAULT ARRAY[]::VARCHAR[];

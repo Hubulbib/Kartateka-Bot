@@ -11,6 +11,11 @@ import { cafeRouter } from "./routers/cafe.router";
 import { userRouter } from "./routers/user.router";
 import { cityRouter } from "./routers/city,router";
 import { criteriaRouter } from "./routers/criteria.router";
+import { reviewRouter } from "./routers/review.router";
+import { postRouter } from "./routers/post.router";
+import { promotionRouter } from "./routers/promotion.router";
+import { businessRouter } from "./routers/business.router";
+import { reportRouter } from "./routers/report.router";
 
 async function bootstrap() {
   const app = express();
@@ -34,14 +39,25 @@ async function bootstrap() {
   // Настройка бота
   await setupBot(bot);
 
+  const allowedOrigins = [
+    process.env.WEB_APP_URL,
+    process.env.BUSINESS_WEB_APP_URL,
+  ].filter(Boolean);
+
   app.use(express.json());
   app.use("/api/bot", webhookCallback(bot, "express"));
-  app.use(cors({ origin: process.env.WEB_APP_URL || "*" }));
+  app.use(
+    cors({
+      origin: allowedOrigins.length > 0 ? allowedOrigins : "*",
+    })
+  );
   app.use(asyncHandler(authMiddleware));
-  app.use("/api/cafe", cafeRouter);
+  app.use("/api/cafe", [reviewRouter, postRouter, promotionRouter, cafeRouter]);
   app.use("/api/users", userRouter);
   app.use("/api/cities", cityRouter);
   app.use("/api/criteria", criteriaRouter);
+  app.use("/api/business", businessRouter);
+  app.use("/api/reports", reportRouter);
   // Запуск бота
   //bot.start();
   //console.log("Bot is running...");

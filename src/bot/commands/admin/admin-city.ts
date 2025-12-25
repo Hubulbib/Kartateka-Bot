@@ -1,11 +1,17 @@
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
-import { AdminAction, AppContext } from "../../../interfaces";
+import { AppContext } from "../../../interfaces";
 import { prismaClient } from "../../../db";
-import { isAdmin } from "../../bot";
+import { getUserRole } from "../../bot";
+import { adminKeyboard } from "../admin";
+import { UserRole } from "@prisma/client";
 
 export const setupCityAdmin = (bot: Bot<AppContext>) => {
   bot.hears("🏙️ Город", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
     const keyboard = new Keyboard()
       .text("➕ Добавить город")
       .row()
@@ -18,7 +24,11 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
 
   // Добавление города
   bot.hears("➕ Добавить город", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
 
     ctx.session.adminAction = "add_city";
     await ctx.reply("Введите название нового города:");
@@ -26,7 +36,11 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
 
   // Просмотр и редактирование городов
   bot.hears("📝 Редактировать город", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
 
     const cityRepo = prismaClient.city;
     const cities = await cityRepo.findMany({
@@ -58,7 +72,11 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
 
   // Обработчик редактирования города
   bot.callbackQuery(/^edit_city_(\d+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
     await ctx.answerCallbackQuery();
 
     const cityId = parseInt(ctx.match[1]);
@@ -77,7 +95,11 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
 
   // Обработчик удаления города
   bot.callbackQuery(/^delete_city_(\d+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
     await ctx.answerCallbackQuery();
 
     const cityId = parseInt(ctx.match[1]);
@@ -107,21 +129,15 @@ export const setupCityAdmin = (bot: Bot<AppContext>) => {
   });
 
   bot.callbackQuery("admin_city_back", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) {
+      await ctx.reply("У вас нет доступа к админ-панели");
+      return;
+    }
     await ctx.answerCallbackQuery();
-    const keyboard = new Keyboard()
-      .text("🏢 Кафе")
-      .row()
-      .text("🏙️ Город")
-      .row()
-      .text("📝 Отзыв")
-      .row()
-      .text("👤 Пользователь")
-      .row()
-      .text("◀️ Назад")
-      .resized();
+
     await ctx.reply("Выберите сущность для управления:", {
-      reply_markup: keyboard,
+      reply_markup: adminKeyboard,
     });
   });
 };

@@ -50,8 +50,6 @@ router.patch("/criteria", async (req, res) => {
     }))
   );
 
-  console.log(criteriaBody, criteriaList);
-
   const result = await prismaClient.$transaction([
     prismaClient.criteriaUser.deleteMany({
       where: { userId: user.id },
@@ -84,7 +82,7 @@ router.get("/reviews", async (req, res) => {
   const userReviews = await reviewRepo.findMany({
     where: { user: { tgId: req["user"]["id"] } },
     orderBy: { createdAt: "desc" },
-    include: { cafe: true },
+    include: { cafe: true, criteria: { include: { criteria: true } } },
   });
 
   for (const review of userReviews) {

@@ -10,7 +10,7 @@ export const authMiddleware = async (
   const initData = req.headers["x-telegram-init-data"] as string;
 
   if (!initData) {
-    return res.status(401);
+    return res.status(401).end();
   }
 
   try {
@@ -19,7 +19,7 @@ export const authMiddleware = async (
     const parsedData = parse(decodedInitData);
 
     if (!parsedData.user) {
-      return res.status(401);
+      return res.status(401).end();
     }
 
     const userRepo = prismaClient.user;
