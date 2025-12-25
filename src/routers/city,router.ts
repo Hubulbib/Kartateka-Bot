@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { AppDataSource } from "../services/database";
-import { City } from "../entities/city";
+import { prismaClient } from "../db";
 
 const router = Router();
 
 router.get("/", async (req, res) => {
-  const cityRepo = AppDataSource.getRepository(City);
-  const cities = await cityRepo.find();
+  const cityRepo = prismaClient.city;
+  const cities = await cityRepo.findMany({ orderBy: { name: "asc" } });
 
   res.json({ data: cities });
 });

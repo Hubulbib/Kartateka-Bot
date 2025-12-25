@@ -1,17 +1,15 @@
 import { Keyboard } from "grammy";
-import { City } from "../../../entities/city";
+import { prismaClient } from "../../../db";
 import { AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
 
 // Функция обработки добавления города
 export async function handleAddCity(ctx: AppContext) {
-  const cityRepo = AppDataSource.getRepository(City);
+  const cityRepo = prismaClient.city;
 
-  const city = cityRepo.create({
-    name: ctx.message.text,
+  const city = await cityRepo.create({
+    data: { name: ctx.message.text },
   });
 
-  await cityRepo.save(city);
   ctx.session.adminAction = undefined;
 
   const keyboard = new Keyboard().text("🔙 Назад").resized();
@@ -25,15 +23,17 @@ export async function handleAddCity(ctx: AppContext) {
 export async function handleEditCity(ctx: AppContext) {
   if (!ctx.session.adminEditingCityId) return;
 
-  const cityRepo = AppDataSource.getRepository(City);
-  const city = await cityRepo.findOneBy({
-    id: ctx.session.adminEditingCityId,
+  const cityRepo = prismaClient.city;
+  const city = await cityRepo.findFirst({
+    where: {
+      id: ctx.session.adminEditingCityId,
+    },
   });
 
   if (city) {
     const oldName = city.name;
     city.name = ctx.message.text;
-    await cityRepo.save(city);
+    await cityRepo.create({ data: { ...city } });
 
     ctx.session.adminAction = undefined;
     ctx.session.adminEditingCityId = undefined;

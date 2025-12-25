@@ -1,5 +1,6 @@
 import { Bot, Keyboard } from "grammy";
 import { AppContext } from "../../interfaces";
+import { UserRole } from "@prisma/client";
 
 export const setupMenu = async (bot: Bot<AppContext>) => {
   // Устанавливаем команды меню
@@ -14,11 +15,15 @@ export const setupMenu = async (bot: Bot<AppContext>) => {
   });
 };
 
-export const getMainMenu = (isAdmin: boolean) => {
+export const getMainMenu = (userRole: UserRole) => {
   const keyboard = new Keyboard().text("ℹ️ О нас").row().text("🧑‍💻 Поддержка");
 
-  if (isAdmin) {
+  if (userRole === UserRole.ADMIN) {
     keyboard.row().text("👨‍💼 Админ-панель");
+  }
+
+  if (userRole === UserRole.BUSINESS) {
+    keyboard.row().text("🏢 Мои кафе");
   }
 
   keyboard.resized();
