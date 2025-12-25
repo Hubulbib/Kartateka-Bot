@@ -12,6 +12,9 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema=src/db/schema.prisma",
     "prisma:studio": "prisma studio --schema=src/db/schema.prisma"
   },
+  "prisma": {
+    "schema": "src/db/schema.prisma"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
