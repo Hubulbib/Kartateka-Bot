@@ -1,12 +1,14 @@
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { AppContext } from "../../../interfaces";
-import { AppDataSource } from "../../../services/database";
-import { User } from "../../../entities/user";
-import { isAdmin } from "../../bot";
+import { prismaClient } from "../../../db";
+import { getUserRole } from "../../bot";
+import { adminKeyboard } from "../admin";
+import { UserRole } from "@prisma/client";
 
 export const setupUserAdmin = (bot: Bot<AppContext>) => {
   bot.hears("👤 Пользователь", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) return;
     const keyboard = new Keyboard()
       .text("📃 Просмотр пользователя")
       .text("🔙 Назад")
@@ -15,21 +17,23 @@ export const setupUserAdmin = (bot: Bot<AppContext>) => {
   });
 
   bot.hears("📃 Просмотр пользователя", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) return;
     await sendUserList(ctx, 0);
   });
 
   bot.callbackQuery(/^admin_user_list_(\d+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) return;
     await ctx.answerCallbackQuery();
     const skip = Number(ctx.match[1]);
     await sendUserList(ctx, skip);
   });
 
   async function sendUserList(ctx: AppContext, skip: number) {
-    const userRepo = AppDataSource.getRepository(User);
-    const users = await userRepo.find({
-      order: { id: "ASC" },
+    const userRepo = prismaClient.user;
+    const users = await userRepo.findMany({
+      orderBy: { id: "asc" },
       take: 10,
       skip,
     });
@@ -62,21 +66,12 @@ export const setupUserAdmin = (bot: Bot<AppContext>) => {
   }
 
   bot.callbackQuery("admin_user_back", async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    const userRole = await getUserRole(ctx);
+    if (userRole !== UserRole.ADMIN) return;
     await ctx.answerCallbackQuery();
-    const keyboard = new Keyboard()
-      .text("🏢 Кафе")
-      .row()
-      .text("🏙️ Город")
-      .row()
-      .text("📝 Отзыв")
-      .row()
-      .text("👤 Пользователь")
-      .row()
-      .text("◀️ Назад")
-      .resized();
+
     await ctx.reply("Выберите сущность для управления:", {
-      reply_markup: keyboard,
+      reply_markup: adminKeyboard,
     });
   });
 };
