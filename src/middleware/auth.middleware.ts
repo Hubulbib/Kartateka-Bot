@@ -7,6 +7,10 @@ export const authMiddleware = async (
   res: Response,
   next: NextFunction
 ) => {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   const initData = req.headers["x-telegram-init-data"] as string;
 
   if (!initData) {
