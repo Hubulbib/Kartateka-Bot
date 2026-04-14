@@ -13,6 +13,10 @@ const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Роутер управления карточкой заведения и связанными сущностями:
+ * рейтинг, расписание, соцсети, редакторы, бейджи и медиа.
+ */
 router.get("/by-owner", async (req, res, next) => {
   const cafeRepo = prismaClient.cafe,
     userRepo = prismaClient.user;
@@ -130,6 +134,7 @@ router.get("/rating/personal", async (req, res, next) => {
     where: { city: { name: city } },
   });
 
+  // Персональный рейтинг строится на основе пользовательских весов критериев.
   for (const cafe of cafeList) {
     if (cafe.reviews.length === 0) {
       cafe["score"] = 0;
@@ -160,7 +165,7 @@ router.get("/rating/personal", async (req, res, next) => {
         }
       }
 
-      // Если в отзыве есть хотя бы 2 критерия (по ТЗ)
+      // Если в отзыве есть хотя бы 2 релевантных критерия (по ТЗ), учитываем его в агрегате.
       if (activeRatings.length >= 2 && reviewTotalWeight > 0) {
         const reviewScore = activeRatings.reduce(
           (score, { rating, weight }) => {
@@ -207,6 +212,7 @@ router.get("/rating", async (req, res, next) => {
     where: { city: { name: city } },
   }); //.filter((cafe) => cafe.reviews.length >= 100);
 
+  // Общий рейтинг: среднее по валидным отзывам (>=2 оцененных критериев).
   for (const cafe of cafeList) {
     if (cafe.reviews.length === 0) {
       cafe["score"] = 0;
@@ -405,6 +411,7 @@ router.patch("/:id/schedules", async (req, res, next) => {
     return;
   }
 
+  // Проверка прав: редактировать расписание может только владелец или назначенный редактор.
   const editor = await editorRepo.findUnique({
     where: { userId: user?.id, cafeId: cafe.id },
   });
@@ -558,6 +565,7 @@ router.patch("/:id/social-networks", async (req, res, next) => {
     return;
   }
 
+  // Используется стратегия "полной замены": удаляем старый набор и создаем новый.
   await socialNetworkRepo.deleteMany({ where: { cafeInfoId: cafe.info.id } });
   const socialNetworks = socialNetworkData.map((el) => ({
     ...el,

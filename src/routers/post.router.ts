@@ -8,6 +8,10 @@ const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Роутер публикаций заведения:
+ * создание, чтение, обновление и удаление постов с медиа-файлами.
+ */
 router.post("/:id/posts", upload.array("files"), async (req, res, next) => {
   const { id } = req.params;
   const files = req.files;
@@ -30,6 +34,7 @@ router.post("/:id/posts", upload.array("files"), async (req, res, next) => {
     return;
   }
 
+  // Каждое загруженное изображение сохраняется в Telegram и в БД хранится file_id.
   const media = await Promise.all(
     files.map(
       async (el) => await ImageService.saveImage(el, +req["user"]["id"])
@@ -148,6 +153,7 @@ router.put("/:id/posts/:pid", upload.array("files"), async (req, res, next) => {
     return;
   }
 
+  // При редактировании формируем новый список media на основе загруженных файлов.
   const media = await Promise.all(
     files.map(
       async (el) => await ImageService.saveImage(el, +req["user"]["id"])

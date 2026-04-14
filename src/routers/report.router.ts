@@ -4,6 +4,10 @@ import { prismaClient } from "../db";
 
 const router = Router();
 
+/**
+ * Роутер пользовательских жалоб.
+ * Поддерживает создание жалобы и получение истории жалоб текущего пользователя.
+ */
 router.post("/", async (req, res, next) => {
   const { type, text }: { type: ReportType; text: string } = req.body;
 

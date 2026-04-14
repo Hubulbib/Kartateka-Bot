@@ -4,6 +4,9 @@ import { prismaClient } from "../db";
 
 const router = Router();
 
+/**
+ * Роутер заявок на подтверждение владения заведением.
+ */
 router.get("/", async (req, res, next) => {
   const userRepo = prismaClient.user,
     businessRequestRepo = prismaClient.businessRequest;
@@ -16,6 +19,7 @@ router.get("/", async (req, res, next) => {
     return;
   }
 
+  // Оставляем только последнюю заявку для каждого названия заведения.
   const latestRequests = await businessRequestRepo.groupBy({
     by: ["cafeName"],
     where: { ownerId: user.id },
@@ -61,6 +65,7 @@ router.post("/request", async (req, res, next) => {
     return;
   }
 
+  // Защита от спама: не более одной заявки в 24 часа.
   if (
     await businessRequestRepo.findFirst({
       where: {

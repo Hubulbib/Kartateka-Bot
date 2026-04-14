@@ -5,6 +5,12 @@ import { ReviewStatus } from "@prisma/client";
 
 const router = Router();
 
+/**
+ * Роутер отзывов:
+ * - получение одобренных отзывов кафе;
+ * - создание нового отзыва с авто-модерацией токсичности;
+ * - ограниченное редактирование отзыва пользователем.
+ */
 router.get("/:id/review", async (req, res, next) => {
   const { id } = req.params;
 
@@ -37,6 +43,7 @@ router.post("/:id/review", async (req, res, next) => {
     return;
   }
 
+  // Ограничение частоты: один отзыв раз в 6 часов.
   {
     const twentyFourHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const review = await reviewRepo.findFirst({
@@ -55,6 +62,7 @@ router.post("/:id/review", async (req, res, next) => {
     }
   }
 
+  // Повторный отзыв на одно и то же кафе запрещен.
   if (
     await reviewRepo.findFirst({
       where: {
@@ -67,6 +75,7 @@ router.post("/:id/review", async (req, res, next) => {
     return;
   }
 
+  // Автоматическая модерация на основе коэффициента токсичности текста.
   let status: ReviewStatus;
   const toxicity = await checkToxic(text);
   if (toxicity < 0.3) status = ReviewStatus.APPROVED;
@@ -113,6 +122,7 @@ router.patch("/review/:rid", async (req, res, next) => {
 
   const reviewRepo = prismaClient.review;
 
+  // Редактирование доступно только ограниченное число раз в допустимое окно времени.
   {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const review = await reviewRepo.findFirst({

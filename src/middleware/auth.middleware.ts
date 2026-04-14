@@ -2,6 +2,18 @@ import { parse } from "@telegram-apps/init-data-node";
 import { NextFunction, Request, Response } from "express";
 import { prismaClient } from "../db";
 
+/**
+ * Middleware аутентификации запросов из Telegram WebApp.
+ *
+ * Алгоритм:
+ * 1) пропускает preflight-запросы OPTIONS;
+ * 2) извлекает init-data из заголовка x-telegram-init-data;
+ * 3) декодирует и валидирует данные пользователя Telegram;
+ * 4) находит пользователя в БД или создает его при первом входе;
+ * 5) сохраняет данные пользователя в req и передает управление дальше.
+ *
+ * @returns 401 при отсутствии или невалидности init-data.
+ */
 export const authMiddleware = async (
   req: Request,
   res: Response,
@@ -18,7 +30,7 @@ export const authMiddleware = async (
   }
 
   try {
-    // Декодируем URL-encoded строку перед парсингом
+    // Telegram может передавать init-data в URL-encoded формате.
     const decodedInitData = decodeURIComponent(initData);
     const parsedData = parse(decodedInitData);
 
@@ -28,6 +40,7 @@ export const authMiddleware = async (
 
     const userRepo = prismaClient.user;
 
+    // Ленивое создание пользователя обеспечивает регистрацию "по факту первого запроса".
     let user = await userRepo.findUnique({
       where: { tgId: parsedData.user.id },
     });

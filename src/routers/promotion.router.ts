@@ -8,6 +8,9 @@ const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Роутер акций заведения (CRUD) с поддержкой загрузки медиа.
+ */
 router.post(
   "/:id/promotions",
   upload.array("files"),
@@ -33,6 +36,7 @@ router.post(
       return;
     }
 
+    // Для хранения используются file_id, а не бинарные файлы.
     const media = await Promise.all(
       files.map(
         async (el) => await ImageService.saveImage(el, +req["user"]["id"])
@@ -152,6 +156,7 @@ router.put(
       return;
     }
 
+    // При обновлении формируется новый список медиа-файлов акции.
     const media = await Promise.all(
       files.map(
         async (el) => await ImageService.saveImage(el, +req["user"]["id"])
