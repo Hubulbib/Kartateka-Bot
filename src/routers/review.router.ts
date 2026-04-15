@@ -2,6 +2,10 @@ import { Router } from "express";
 import { prismaClient } from "../db";
 import { checkToxic } from "../utils/helpers";
 import { ReviewStatus } from "@prisma/client";
+import {
+  canCreateReviewByCooldown,
+  getReviewStatusByToxicity,
+} from "../utils/review-rules";
 
 const router = Router();
 
@@ -45,18 +49,19 @@ router.post("/:id/review", async (req, res, next) => {
 
   // Ограничение частоты: один отзыв раз в 6 часов.
   {
-    const twentyFourHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    const now = new Date();
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
     const review = await reviewRepo.findFirst({
       where: {
         user: { tgId: req["user"]["id"] },
-        createdAt: { gte: twentyFourHoursAgo, lte: new Date() },
+        createdAt: { gte: sixHoursAgo, lte: now },
       },
       orderBy: {
         createdAt: "desc",
       },
     });
 
-    if (review) {
+    if (!canCreateReviewByCooldown(review?.createdAt || null, now, 6)) {
       res.status(403).end();
       return;
     }
@@ -78,9 +83,7 @@ router.post("/:id/review", async (req, res, next) => {
   // Автоматическая модерация на основе коэффициента токсичности текста.
   let status: ReviewStatus;
   const toxicity = await checkToxic(text);
-  if (toxicity < 0.3) status = ReviewStatus.APPROVED;
-  else if (toxicity >= 0.3 && toxicity < 0.7) status = ReviewStatus.MODERATION;
-  else status = ReviewStatus.REJECTED;
+  status = getReviewStatusByToxicity(toxicity);
 
   const review = await reviewRepo.create({
     data: {
@@ -151,8 +154,7 @@ router.patch("/review/:rid", async (req, res, next) => {
   let status: ReviewStatus = ReviewStatus.APPROVED;
   if (body?.text) {
     const toxicity = await checkToxic(body.text);
-    if (toxicity >= 0.3 && toxicity < 0.7) status = ReviewStatus.MODERATION;
-    else status = ReviewStatus.REJECTED;
+    status = getReviewStatusByToxicity(toxicity);
   }
 
   review = await reviewRepo.update({

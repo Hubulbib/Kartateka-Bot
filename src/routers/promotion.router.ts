@@ -3,6 +3,10 @@ import { prismaClient } from "../db";
 import { Promotion } from "@prisma/client";
 import { ImageService } from "../services/image";
 import multer from "multer";
+import {
+  hasValidUploadedFiles,
+  normalizePromotionDates,
+} from "../utils/upload-rules";
 
 const router = Router();
 
@@ -31,7 +35,7 @@ router.post(
       return;
     }
 
-    if (!Array.isArray(files)) {
+    if (!hasValidUploadedFiles(files)) {
       res.status(400).end();
       return;
     }
@@ -43,13 +47,16 @@ router.post(
       )
     );
 
+    const normalizedDates = normalizePromotionDates(
+      promotionData.dateEnd,
+      promotionData.dateStart
+    );
+
     const promotion = await promotionRepo.create({
       data: {
         ...promotionData,
-        dateEnd: new Date(promotionData.dateEnd),
-        dateStart: promotionData.dateStart
-          ? new Date(promotionData.dateStart)
-          : new Date(),
+        dateEnd: normalizedDates.dateEnd,
+        dateStart: normalizedDates.dateStart,
         media: media.map((el) => el.file_id),
         cafe: { connect: { id: cafe.id } },
       },
@@ -151,7 +158,7 @@ router.put(
       return;
     }
 
-    if (!Array.isArray(files)) {
+    if (!hasValidUploadedFiles(files)) {
       res.status(400).end();
       return;
     }
@@ -163,13 +170,18 @@ router.put(
       )
     );
 
+    const normalizedDates = normalizePromotionDates(
+      promotionData.dateEnd,
+      promotionData.dateStart
+    );
+
     const newPromotion = await promotionRepo.update({
       where: { id: promotion.id },
       data: {
         ...promotionData,
         media: media.map((el) => el.file_id),
-        dateStart: new Date(promotionData.dateStart),
-        dateEnd: new Date(promotionData.dateEnd),
+        dateStart: normalizedDates.dateStart,
+        dateEnd: normalizedDates.dateEnd,
       },
       include: { cafe: true },
     });

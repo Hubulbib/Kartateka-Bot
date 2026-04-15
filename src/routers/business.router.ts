@@ -1,6 +1,7 @@
 import { SocialNetworkRequest } from "@prisma/client";
 import { Router } from "express";
 import { prismaClient } from "../db";
+import { canCreateBusinessRequestByCooldown } from "../utils/business-rules";
 
 const router = Router();
 
@@ -66,16 +67,19 @@ router.post("/request", async (req, res, next) => {
   }
 
   // Защита от спама: не более одной заявки в 24 часа.
-  if (
-    await businessRequestRepo.findFirst({
-      where: {
-        ownerId: user.id,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        },
+  const now = new Date();
+  const latestRequest = await businessRequestRepo.findFirst({
+    where: {
+      ownerId: user.id,
+      createdAt: {
+        gte: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       },
-    })
-  ) {
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+  if (!canCreateBusinessRequestByCooldown(latestRequest?.createdAt || null, now, 24)) {
     res.status(400);
     return;
   }

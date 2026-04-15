@@ -3,6 +3,7 @@ import { prismaClient } from "../db";
 import { Post } from "@prisma/client";
 import { ImageService } from "../services/image";
 import multer from "multer";
+import { hasValidUploadedFiles } from "../utils/upload-rules";
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.post("/:id/posts", upload.array("files"), async (req, res, next) => {
     return;
   }
 
-  if (!Array.isArray(files)) {
+  if (!hasValidUploadedFiles(files)) {
     res.status(400).end();
     return;
   }
@@ -148,7 +149,7 @@ router.put("/:id/posts/:pid", upload.array("files"), async (req, res, next) => {
     return;
   }
 
-  if (!Array.isArray(files)) {
+  if (!hasValidUploadedFiles(files)) {
     res.status(400).end();
     return;
   }
