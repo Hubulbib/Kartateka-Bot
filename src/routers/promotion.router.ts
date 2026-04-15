@@ -3,11 +3,18 @@ import { prismaClient } from "../db";
 import { Promotion } from "@prisma/client";
 import { ImageService } from "../services/image";
 import multer from "multer";
+import {
+  hasValidUploadedFiles,
+  normalizePromotionDates,
+} from "../utils/upload-rules";
 
 const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Роутер акций заведения (CRUD) с поддержкой загрузки медиа.
+ */
 router.post(
   "/:id/promotions",
   upload.array("files"),
@@ -28,24 +35,28 @@ router.post(
       return;
     }
 
-    if (!Array.isArray(files)) {
+    if (!hasValidUploadedFiles(files)) {
       res.status(400).end();
       return;
     }
 
+    // Для хранения используются file_id, а не бинарные файлы.
     const media = await Promise.all(
       files.map(
         async (el) => await ImageService.saveImage(el, +req["user"]["id"])
       )
     );
 
+    const normalizedDates = normalizePromotionDates(
+      promotionData.dateEnd,
+      promotionData.dateStart
+    );
+
     const promotion = await promotionRepo.create({
       data: {
         ...promotionData,
-        dateEnd: new Date(promotionData.dateEnd),
-        dateStart: promotionData.dateStart
-          ? new Date(promotionData.dateStart)
-          : new Date(),
+        dateEnd: normalizedDates.dateEnd,
+        dateStart: normalizedDates.dateStart,
         media: media.map((el) => el.file_id),
         cafe: { connect: { id: cafe.id } },
       },
@@ -147,15 +158,21 @@ router.put(
       return;
     }
 
-    if (!Array.isArray(files)) {
+    if (!hasValidUploadedFiles(files)) {
       res.status(400).end();
       return;
     }
 
+    // При обновлении формируется новый список медиа-файлов акции.
     const media = await Promise.all(
       files.map(
         async (el) => await ImageService.saveImage(el, +req["user"]["id"])
       )
+    );
+
+    const normalizedDates = normalizePromotionDates(
+      promotionData.dateEnd,
+      promotionData.dateStart
     );
 
     const newPromotion = await promotionRepo.update({
@@ -163,8 +180,8 @@ router.put(
       data: {
         ...promotionData,
         media: media.map((el) => el.file_id),
-        dateStart: new Date(promotionData.dateStart),
-        dateEnd: new Date(promotionData.dateEnd),
+        dateStart: normalizedDates.dateStart,
+        dateEnd: normalizedDates.dateEnd,
       },
       include: { cafe: true },
     });

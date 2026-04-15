@@ -17,6 +17,12 @@ import { promotionRouter } from "./routers/promotion.router";
 import { businessRouter } from "./routers/business.router";
 import { reportRouter } from "./routers/report.router";
 
+/**
+ * Точка инициализации серверной части:
+ * - поднимает Express API;
+ * - конфигурирует Telegram-бота и webhook;
+ * - подключает middleware аутентификации и роутеры доменных модулей.
+ */
 async function bootstrap() {
   const app = express();
   const PORT = +process.env.PORT;
@@ -52,6 +58,7 @@ async function bootstrap() {
     })
   );
   app.use(asyncHandler(authMiddleware));
+  // Группировка роутов по домену "кафе" упрощает поддержку API.
   app.use("/api/cafe", [reviewRouter, postRouter, promotionRouter, cafeRouter]);
   app.use("/api/users", userRouter);
   app.use("/api/cities", cityRouter);

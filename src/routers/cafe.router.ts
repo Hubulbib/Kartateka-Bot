@@ -8,11 +8,19 @@ import {
   SocialNetworkType,
 } from "@prisma/client";
 import multer from "multer";
+import {
+  calculatePersonalCafeScore,
+  calculatePublicCafeScore,
+} from "../utils/rating";
 
 const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Роутер управления карточкой заведения и связанными сущностями:
+ * рейтинг, расписание, соцсети, редакторы, бейджи и медиа.
+ */
 router.get("/by-owner", async (req, res, next) => {
   const cafeRepo = prismaClient.cafe,
     userRepo = prismaClient.user;
@@ -130,52 +138,9 @@ router.get("/rating/personal", async (req, res, next) => {
     where: { city: { name: city } },
   });
 
+  // Персональный рейтинг строится на основе пользовательских весов критериев.
   for (const cafe of cafeList) {
-    if (cafe.reviews.length === 0) {
-      cafe["score"] = 0;
-      continue;
-    }
-
-    let totalWeightedScore = 0;
-    let totalEffectiveWeight = 0;
-
-    for (const review of cafe.reviews.filter(
-      (el) => el.status === ReviewStatus.APPROVED
-    )) {
-      // Для каждого отзыва считаем взвешенную оценку по ТЗ
-      const activeRatings = [];
-      let reviewTotalWeight = 0;
-
-      // Собираем активные критерии отзыва
-      for (const criteriaReview of review.criteria) {
-        const userCriterion = user.criteria.find(
-          (uc) => uc.criteriaId === criteriaReview.criteriaId
-        );
-        if (userCriterion) {
-          activeRatings.push({
-            rating: criteriaReview.mark,
-            weight: userCriterion.weight,
-          });
-          reviewTotalWeight += userCriterion.weight;
-        }
-      }
-
-      // Если в отзыве есть хотя бы 2 критерия (по ТЗ)
-      if (activeRatings.length >= 2 && reviewTotalWeight > 0) {
-        const reviewScore = activeRatings.reduce(
-          (score, { rating, weight }) => {
-            return score + (rating * weight) / reviewTotalWeight;
-          },
-          0
-        );
-
-        totalWeightedScore += reviewScore;
-        totalEffectiveWeight += 1; // Каждый отзыв с валидными критериями
-      }
-    }
-
-    cafe["score"] =
-      totalEffectiveWeight > 0 ? totalWeightedScore / totalEffectiveWeight : 0;
+    cafe["score"] = calculatePersonalCafeScore(cafe.reviews, user.criteria);
   }
 
   cafeList.sort((a, b) => b["score"] - a["score"]);
@@ -207,29 +172,9 @@ router.get("/rating", async (req, res, next) => {
     where: { city: { name: city } },
   }); //.filter((cafe) => cafe.reviews.length >= 100);
 
+  // Общий рейтинг: среднее по валидным отзывам (>=2 оцененных критериев).
   for (const cafe of cafeList) {
-    if (cafe.reviews.length === 0) {
-      cafe["score"] = 0;
-      continue;
-    }
-
-    let totalScore = 0;
-    let validReviewsCount = 0;
-
-    for (const review of cafe.reviews.filter(
-      (el) => el.status === ReviewStatus.APPROVED
-    )) {
-      // Учитываем только отзывы с минимум 2 критериями
-      if (review.criteria.length >= 2) {
-        const reviewScore =
-          review.criteria.reduce((sum, cr) => sum + cr.mark, 0) /
-          review.criteria.length;
-        totalScore += reviewScore;
-        validReviewsCount++;
-      }
-    }
-
-    cafe["score"] = validReviewsCount > 0 ? totalScore / validReviewsCount : 0;
+    cafe["score"] = calculatePublicCafeScore(cafe.reviews);
   }
 
   cafeList.sort((a, b) => b["score"] - a["score"]);
@@ -405,6 +350,7 @@ router.patch("/:id/schedules", async (req, res, next) => {
     return;
   }
 
+  // Проверка прав: редактировать расписание может только владелец или назначенный редактор.
   const editor = await editorRepo.findUnique({
     where: { userId: user?.id, cafeId: cafe.id },
   });
@@ -558,6 +504,7 @@ router.patch("/:id/social-networks", async (req, res, next) => {
     return;
   }
 
+  // Используется стратегия "полной замены": удаляем старый набор и создаем новый.
   await socialNetworkRepo.deleteMany({ where: { cafeInfoId: cafe.info.id } });
   const socialNetworks = socialNetworkData.map((el) => ({
     ...el,

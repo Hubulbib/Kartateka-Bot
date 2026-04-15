@@ -1,3 +1,5 @@
+import { google } from "googleapis";
+
 export const formatPrice = (price: number): string => {
   return new Intl.NumberFormat("ru-RU", {
     style: "decimal",
@@ -6,22 +8,40 @@ export const formatPrice = (price: number): string => {
 };
 
 export const checkToxic = async (text: string): Promise<number> => {
-  const res = await fetch(
-    `https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=${process.env.TOXIC_API_KEY}`,
-    {
-      method: "POST",
-      body: JSON.stringify({
+  try {
+    let res: number = 0;
+
+    const DISCOVERY_URL =
+      "https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1";
+    google.discoverAPI(DISCOVERY_URL).then((client) => {
+      const analyzeRequest = {
         comment: {
           text,
         },
-        languages: ["ru"],
-        requestedAttributes: { TOXICITY: {} },
-      }),
-      headers: { "Content-Type": "application/json" },
-    }
-  );
-  const data = await res.json();
-  return data["attributeScores"]["TOXICITY"]["spanScores"][0]["score"][
-    "value"
-  ] as number;
+        requestedAttributes: {
+          TOXICITY: {},
+        },
+      };
+
+      client.comments["analyze"](
+        {
+          key: process.env.TOXIC_API_KEY,
+          resource: analyzeRequest,
+        },
+        (err, response) => {
+          if (err) {
+            console.log(err);
+            return 0;
+          }
+          res = response.data["attributeScores"]["TOXICITY"]["spanScores"][0][
+            "score"
+          ]["value"] as number;
+        }
+      );
+
+      return res;
+    });
+  } catch (err) {
+    return 0;
+  }
 };

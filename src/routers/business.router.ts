@@ -1,9 +1,13 @@
 import { SocialNetworkRequest } from "@prisma/client";
 import { Router } from "express";
 import { prismaClient } from "../db";
+import { canCreateBusinessRequestByCooldown } from "../utils/business-rules";
 
 const router = Router();
 
+/**
+ * Роутер заявок на подтверждение владения заведением.
+ */
 router.get("/", async (req, res, next) => {
   const userRepo = prismaClient.user,
     businessRequestRepo = prismaClient.businessRequest;
@@ -16,6 +20,7 @@ router.get("/", async (req, res, next) => {
     return;
   }
 
+  // Оставляем только последнюю заявку для каждого названия заведения.
   const latestRequests = await businessRequestRepo.groupBy({
     by: ["cafeName"],
     where: { ownerId: user.id },
@@ -61,16 +66,20 @@ router.post("/request", async (req, res, next) => {
     return;
   }
 
-  if (
-    await businessRequestRepo.findFirst({
-      where: {
-        ownerId: user.id,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        },
+  // Защита от спама: не более одной заявки в 24 часа.
+  const now = new Date();
+  const latestRequest = await businessRequestRepo.findFirst({
+    where: {
+      ownerId: user.id,
+      createdAt: {
+        gte: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       },
-    })
-  ) {
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+  if (!canCreateBusinessRequestByCooldown(latestRequest?.createdAt || null, now, 24)) {
     res.status(400);
     return;
   }

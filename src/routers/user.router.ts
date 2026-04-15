@@ -4,6 +4,12 @@ import { ImageService } from "../services/image";
 
 const router = Router();
 
+/**
+ * Роутер пользовательского профиля:
+ * - чтение профиля;
+ * - редактирование города и приоритетных критериев;
+ * - получение пользовательских отзывов.
+ */
 router.get("/my", async (req, res) => {
   const userRepo = prismaClient.user;
   const user = await userRepo.findUnique({
@@ -50,6 +56,7 @@ router.patch("/criteria", async (req, res) => {
     }))
   );
 
+  // Транзакция гарантирует атомарную замену старых весов критериев новыми.
   const result = await prismaClient.$transaction([
     prismaClient.criteriaUser.deleteMany({
       where: { userId: user.id },
@@ -85,6 +92,7 @@ router.get("/reviews", async (req, res) => {
     include: { cafe: true, criteria: { include: { criteria: true } } },
   });
 
+  // Для выдачи в клиент возвращаются публичные URL изображений.
   for (const review of userReviews) {
     if (review.cafe) {
       review.cafe.avatar = await ImageService.getImage(review.cafe.avatar);
